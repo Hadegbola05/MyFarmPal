@@ -266,8 +266,8 @@ export default function CropRecommendationEngine() {
                         <Compass size={20} />
                       </div>
                       <div className="text-sm">
-                        <p className="font-bold text-primary mb-1">AI Recommendation logic active</p>
-                        <p className="text-slate-600 leading-relaxed">Our AI considers your experience level to suggest crops that are easier to manage for beginners vs high-yield expert varieties.</p>
+                        <p className="font-bold text-primary mb-1">Smart Recommendation logic active</p>
+                        <p className="text-slate-600 leading-relaxed">The system considers your experience level to suggest crops that are easier to manage for beginners vs high-yield expert varieties.</p>
                       </div>
                     </div>
                   </div>

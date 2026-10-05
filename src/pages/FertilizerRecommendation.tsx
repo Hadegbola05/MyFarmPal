@@ -263,7 +263,7 @@ export default function FertilizerRecommendation() {
 
                   <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="text-center sm:text-left">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">AI Confidence Score</p>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-tighter">Confidence Score</p>
                       <div className="flex items-center gap-2">
                         <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
                           <motion.div 

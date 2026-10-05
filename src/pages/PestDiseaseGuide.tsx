@@ -69,10 +69,10 @@ export default function PestDiseaseGuide() {
       {/* AI Detection Hero */}
       <div className="bg-gradient-to-r from-slate-900 to-primary rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8">
         <div className="max-w-md space-y-4">
-          <Badge className="bg-secondary text-secondary-foreground border-none">AI Feature</Badge>
+          <Badge className="bg-secondary text-secondary-foreground border-none">Instant Diagnosis</Badge>
           <h2 className="text-3xl font-bold">Diagnose in Seconds</h2>
           <p className="text-slate-300">
-            Having trouble with your crops? Take a photo and let our AI identify pests or diseases instantly.
+            Having trouble with your crops? Take a photo to identify pests or diseases instantly.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button className="bg-secondary text-secondary-foreground hover:bg-secondary/80 gap-2">
@@ -102,7 +102,7 @@ export default function PestDiseaseGuide() {
               <div className="flex items-center gap-4">
                   <div className="bg-secondary/20 text-primary font-bold p-3 rounded-lg">2</div>
                   <div>
-                      <h4 className="font-bold">AI Analysis</h4>
+                      <h4 className="font-bold">Instant Analysis</h4>
                       <p className="text-sm text-muted-foreground">Our model analyzes the image against a vast database.</p>
                   </div>
               </div>

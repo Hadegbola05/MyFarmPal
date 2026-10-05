@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.08" />
+    </filter>
+  </defs>
+
+  <!-- Mascot Illustration Group -->
+  <g transform="translate(40, 20) scale(3.6)" filter="url(#shadow)">
+    <!-- Roots for Green Sprout 'f' -->
+    <path d="M38 102C38 108 34 113 28 116M28 116L22 124M28 116L30 125M28 116L35 123" stroke="#2B1608" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <!-- Leaf on top of green f -->
+    <path d="M55 24C62 10 74 12 73 22C63 26 58 24 55 24Z" fill="#52B824" stroke="#2B1608" stroke-width="4" stroke-linejoin="round" />
+    
+    <!-- Green 'f' Sprout Body -->
+    <path d="M36 28C36 20 44 17 52 17C57 17 59 20 59 26C59 38 56 46 56 47H45V60H53V72H45V92C45 98 42 102 38 104C34 102 33 97 33 92V38C33 32 34 29 36 28Z" fill="#54B82A" stroke="#2B1608" stroke-width="4" stroke-linejoin="round" />
+    
+    <!-- 'm' branch on left -->
+    <path d="M33 66L23 60C20 58 16 63 19 66L20 72C22 75 26 73 28 71" stroke="#6F4223" stroke-width="4" stroke-linecap="round" />
+    <path d="M16 62C14 62 12 65 14 68C16 71 18 70 20 67" stroke="#6F4223" stroke-width="3" stroke-linecap="round" />
+    
+    <!-- Roots for Yellow 'P' -->
+    <path d="M75 102C75 108 71 113 66 115M66 115L61 123M66 115L67 124M66 115L73 122" stroke="#2B1608" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+
+    <!-- Golden Yellow 'P' Character Body -->
+    <path d="M65 32C65 24 73 20 84 20C96 20 102 28 102 38C102 48 94 56 83 56H75V92C75 98 71 103 66 105C61 103 61 98 61 92V38C61 34 63 32 65 32Z" fill="#FFBD0A" stroke="#2B1608" stroke-width="4" stroke-linejoin="round" />
+    
+    <!-- P Head counter opening -->
+    <path d="M75 32H83C88 32 92 35 92 40C92 45 88 48 83 48H75V32Z" fill="#FFF2B2" stroke="#2B1608" stroke-width="3.5" />
+    
+    <!-- Sprout Face (Eyes & Smiles) -->
+    <circle cx="43" cy="38" r="3" fill="#2B1608" />
+    <circle cx="51" cy="38" r="3" fill="#2B1608" />
+    <path d="M44 43C46 45 49 45 51 43" stroke="#2B1608" stroke-width="2.5" stroke-linecap="round" />
+    
+    <!-- Yellow P Face (Eyes & Smiles) -->
+    <circle cx="78" cy="38" r="3" fill="#2B1608" />
+    <circle cx="89" cy="39" r="3" fill="#2B1608" />
+    <path d="M80 43C83 46 86 46 88 43" stroke="#2B1608" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M81 50C85 52 89 50 90 49" stroke="#2B1608" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+</svg>

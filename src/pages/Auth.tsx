@@ -1,207 +1,309 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { toastSupabaseError } from '@/lib/utils';
-import { Sprout, Leaf, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import AppLogo from '@/components/AppLogo';
+import SplashScreen from '@/components/SplashScreen';
 
 export default function Auth() {
-  const [email, setEmail] = React.useState('');
+  const [showSplash, setShowSplash] = React.useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('splash') === 'true') return true;
+      if (params.get('skipSplash') === 'true') return false;
+      return !sessionStorage.getItem('myfarmpal_splash_seen');
+    } catch {
+      return false;
+    }
+  });
+
+  const [mode, setMode] = React.useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = React.useState('farmer@gmail.com');
   const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const navigate = useNavigate();
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    if (error) {
-      toastSupabaseError(error, 'Could not sign up. Please try again.');
-    } else {
-      toast.success('Check your email for the confirmation link!');
+  const handleSplashFinish = React.useCallback(() => {
+    try {
+      sessionStorage.setItem('myfarmpal_splash_seen', 'true');
+    } catch {
+      // ignore
     }
+    setShowSplash(false);
+  }, []);
+
+  const isEmailValid = email.includes('@') && email.includes('.');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast.error('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+
+    if (mode === 'signup') {
+      if (!password || password.length < 6) {
+        toast.error('Password must be at least 6 characters');
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        toastSupabaseError(error, 'Could not sign up. Please try again.');
+      } else {
+        toast.success('Account created! Check your email for confirmation link.');
+      }
+    } else {
+      // Sign In mode
+      if (!password) {
+        setPassword('password123');
+      }
+
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password: password || 'password123',
+        });
+
+        if (error) {
+          toastSupabaseError(error, 'Invalid credentials. You can continue as Demo Farmer.');
+        } else {
+          localStorage.removeItem('agri_demo_user');
+          toast.success('Welcome back to MyFarmPal!');
+          navigate('/');
+        }
+      } catch {
+        toast.error('Auth error. You can continue as Demo Farmer.');
+      }
+    }
+
     setLoading(false);
   };
 
   const handleDemoLogin = () => {
     const demoUser = {
       id: 'demo-farmer-id',
-      email: 'farmer@agri-smart.demo',
+      email: email || 'farmer@agri-smart.demo',
       user_metadata: { full_name: 'Demo Farmer' }
     };
     localStorage.setItem('agri_demo_user', JSON.stringify(demoUser));
-    toast.success('Welcome, Farmer! Exploring in demo mode.');
+    toast.success('Welcome! Exploring as Demo Farmer.');
     navigate('/');
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        toastSupabaseError(error, 'Invalid login credentials.');
-      } else {
-        localStorage.removeItem('agri_demo_user');
-        toast.success('Welcome back to AgriSmart!');
-        navigate('/');
-      }
-    } catch {
-      toast.error('Unable to connect to auth server. You can continue as Demo Farmer.');
-    }
-    setLoading(false);
+  const handleSocialClick = (provider: string) => {
+    toast.info(`${provider} sign-in selected. Continuing as Demo Farmer...`);
+    handleDemoLogin();
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFCF6] flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-secondary/10 rounded-full blur-3xl" />
-      </div>
+    <>
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            key="splash-overlay"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: 'easeInOut' }}
+            className="fixed inset-0 z-50 bg-white"
+          >
+            <SplashScreen onFinish={handleSplashFinish} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div className="w-full max-w-md space-y-8 relative z-10">
-        <div className="text-center space-y-2">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg transform -rotate-3 hover:rotate-0 transition-transform">
-              <Sprout size={32} />
-            </div>
+      <div className="min-h-screen bg-gradient-to-b from-emerald-50/60 via-white to-amber-50/30 flex flex-col items-center justify-center p-4 sm:p-6 select-none relative overflow-hidden">
+        {/* Subtle decorative background organic glows */}
+        <div className="absolute -top-32 -left-32 w-80 h-80 bg-emerald-200/25 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-amber-200/25 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="w-full max-w-[400px] flex flex-col items-center relative z-10">
+          {/* Big Brand Logo with Mascot on Top and Name Under */}
+          <div className="mb-6 flex flex-col items-center justify-center cursor-pointer group" onClick={() => navigate('/')}>
+            <AppLogo size="xl" direction="col" showText={true} />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">AgriSmart AI</h1>
-          <p className="text-muted-foreground">Your intelligent companion for modern farming</p>
+
+          {/* Header Title */}
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight text-center">
+            Welcome Back
+          </h1>
+          <p className="text-sm text-slate-500 font-medium mt-1.5 mb-7 text-center">
+            Welcome Back , Please enter Your details
+          </p>
+
+          {/* Tab Switcher (Pill Style with Brand Palette) */}
+          <div className="w-full bg-emerald-50/80 border border-emerald-100/70 p-1.5 rounded-2xl flex items-center mb-6 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setMode('signin')}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${
+                mode === 'signin'
+                  ? 'bg-white text-emerald-950 shadow-sm border border-emerald-100/80'
+                  : 'text-slate-500 hover:text-emerald-800'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('signup')}
+              className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all ${
+                mode === 'signup'
+                  ? 'bg-white text-emerald-950 shadow-sm border border-emerald-100/80'
+                  : 'text-slate-500 hover:text-emerald-800'
+              }`}
+            >
+              Signup
+            </button>
+          </div>
+
+          {/* Auth Form */}
+          <form onSubmit={handleSubmit} className="w-full space-y-4">
+            {/* Email Address Input Container */}
+            <div className="w-full border border-slate-200/90 rounded-2xl px-4 py-2.5 flex items-center gap-3.5 bg-white focus-within:border-[#4FA924] focus-within:ring-2 focus-within:ring-[#4FA924]/20 transition-all shadow-xs">
+              <div className="text-slate-600 shrink-0">
+                <Mail size={20} strokeWidth={2} />
+              </div>
+
+              <div className="w-[1px] h-9 bg-slate-200 shrink-0" />
+
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span className="text-[11px] font-semibold text-slate-400 leading-tight">
+                  Email Address
+                </span>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="farmer@gmail.com"
+                  className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                />
+              </div>
+
+              {/* Sprout Green Checkmark Badge */}
+              {isEmailValid && (
+                <div className="shrink-0 w-5 h-5 rounded-full bg-[#4FA924] flex items-center justify-center text-white shadow-xs">
+                  <CheckCircle2 size={15} className="text-white" strokeWidth={3} />
+                </div>
+              )}
+            </div>
+
+            {/* Password Input Container */}
+            <div className="w-full border border-slate-200/90 rounded-2xl px-4 py-2.5 flex items-center gap-3.5 bg-white focus-within:border-[#4FA924] focus-within:ring-2 focus-within:ring-[#4FA924]/20 transition-all shadow-xs">
+              <div className="text-slate-600 shrink-0">
+                <Lock size={20} strokeWidth={2} />
+              </div>
+
+              <div className="w-[1px] h-9 bg-slate-200 shrink-0" />
+
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <span className="text-[11px] font-semibold text-slate-400 leading-tight">
+                  {mode === 'signup' ? 'Create Password' : 'Password'}
+                </span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'signup' ? 'Min 6 characters' : 'Enter your password'}
+                  className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-900 focus:outline-none placeholder:text-slate-300"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="shrink-0 text-slate-400 hover:text-emerald-700 p-0.5"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {/* Continue Sprout Green Brand Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-[52px] mt-2 bg-gradient-to-r from-[#4FA924] to-[#43921E] hover:from-[#43921E] hover:to-[#387c19] text-white font-bold text-base rounded-2xl shadow-lg shadow-emerald-600/25 active:scale-[0.99] transition-all flex items-center justify-center cursor-pointer"
+            >
+              {loading ? 'Please wait...' : 'Continue'}
+            </button>
+          </form>
+
+          {/* Divider: Or Continue With */}
+          <div className="w-full flex items-center my-6">
+            <div className="flex-1 h-[1px] bg-slate-200" />
+            <span className="px-4 text-xs font-medium text-slate-400">
+              Or Continue With
+            </span>
+            <div className="flex-1 h-[1px] bg-slate-200" />
+          </div>
+
+          {/* Social Login Circles: Google and Apple */}
+          <div className="flex items-center justify-center gap-6 mb-6">
+            {/* Google */}
+            <button
+              type="button"
+              onClick={() => handleSocialClick('Google')}
+              className="w-[52px] h-[52px] rounded-full bg-white border border-slate-200/90 shadow-xs flex items-center justify-center hover:bg-emerald-50/50 hover:border-emerald-300 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              aria-label="Continue with Google"
+              title="Continue with Google"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.27 21.36 7.35 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.27 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+            </button>
+
+            {/* Apple */}
+            <button
+              type="button"
+              onClick={() => handleSocialClick('Apple')}
+              className="w-[52px] h-[52px] rounded-full bg-slate-900 shadow-xs flex items-center justify-center hover:bg-black hover:scale-105 active:scale-95 transition-all cursor-pointer text-white"
+              aria-label="Continue with Apple"
+              title="Continue with Apple"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 0.93-2.85-.9.04-1.99.6-2.63 1.35-.57.65-1.06 1.72-.93 2.74 1 .08 2.02-.49 2.63-1.24" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Demo Farmer Quick Access (Styled in Brand Green & Gold) */}
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            className="w-full py-2.5 px-4 rounded-2xl bg-emerald-50/90 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/90 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs active:scale-[0.99]"
+          >
+            <span>🌾</span>
+            <span>Explore Instant Demo (No Credentials Needed)</span>
+          </button>
         </div>
-
-        <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8 bg-slate-100/50 p-1">
-            <TabsTrigger value="login">Login</TabsTrigger>
-            <TabsTrigger value="signup">Sign Up</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="login">
-            <Card className="border-none shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Welcome Back</CardTitle>
-                <CardDescription>Enter your credentials to access your farm intelligence.</CardDescription>
-              </CardHeader>
-              <form onSubmit={handleLogin}>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="farmer@example.com" 
-                      required 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-slate-50/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input 
-                      id="password" 
-                      type="password" 
-                      required 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-slate-50/50"
-                    />
-                  </div>
-                </CardContent>
-                <CardFooter className="flex flex-col space-y-4">
-                  <Button className="w-full h-11 bg-primary hover:bg-primary/90" disabled={loading}>
-                    {loading ? 'Authenticating...' : 'Sign In'}
-                  </Button>
-                  <div className="relative w-full my-1">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white/80 px-2 text-muted-foreground">Or</span></div>
-                  </div>
-                  <Button type="button" variant="outline" className="w-full h-10 border-emerald-600/30 text-emerald-800 hover:bg-emerald-50" onClick={handleDemoLogin}>
-                    Continue as Demo Farmer
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" type="button">
-                    Forgot your password?
-                  </Button>
-                </CardFooter>
-              </form>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="signup">
-            <Card className="border-none shadow-xl bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle>Join the Future of Farming</CardTitle>
-                <CardDescription>Create your account and start optimizing your yield today.</CardDescription>
-              </CardHeader>
-              <form onSubmit={handleSignUp}>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input 
-                      id="signup-email" 
-                      type="email" 
-                      placeholder="farmer@example.com" 
-                      required 
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="bg-slate-50/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Password</Label>
-                    <Input 
-                      id="signup-password" 
-                      type="password" 
-                      required 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-slate-50/50"
-                    />
-                  </div>
-                </CardContent>
-                <CardFooter className="flex flex-col space-y-4 mt-2">
-                  <Button className="w-full h-11 bg-secondary text-secondary-foreground hover:bg-secondary/90" disabled={loading}>
-                    {loading ? 'Creating Account...' : 'Get Started'}
-                  </Button>
-                  <div className="relative w-full my-1">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white/80 px-2 text-muted-foreground">Or</span></div>
-                  </div>
-                  <Button type="button" variant="outline" className="w-full h-10 border-emerald-600/30 text-emerald-800 hover:bg-emerald-50" onClick={handleDemoLogin}>
-                    Explore in Demo Mode
-                  </Button>
-                </CardFooter>
-              </form>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center gap-2 p-3 bg-white/50 rounded-xl border border-slate-100">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-              <Leaf size={16} />
-            </div>
-            <span className="text-[10px] font-medium text-slate-600">Smart Crop Recommendations</span>
-          </div>
-          <div className="flex items-center gap-2 p-3 bg-white/50 rounded-xl border border-slate-100">
-            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
-              <ArrowRight size={16} />
-            </div>
-            <span className="text-[10px] font-medium text-slate-600">Real-time Market Prices</span>
-          </div>
-        </div>
       </div>
-    </div>
+    </>
   );
 }

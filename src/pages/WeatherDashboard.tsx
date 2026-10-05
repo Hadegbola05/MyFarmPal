@@ -196,7 +196,7 @@ export default function WeatherDashboard() {
             <Sprout size={32} />
           </div>
           <div className="flex-1">
-            <h3 className="text-xl font-bold mb-1">AI Agricultural Insight</h3>
+            <h3 className="text-xl font-bold mb-1">Agricultural Insight</h3>
             <p className="text-primary-foreground/80 leading-relaxed">
               Based on current humidity and temperature, there is a <span className="text-secondary font-bold">high risk of fungal growth</span> in Tomato crops. Consider applying preventive treatment today before the evening rain.
             </p>

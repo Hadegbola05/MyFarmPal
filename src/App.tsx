@@ -16,8 +16,8 @@ const CostAnalysis = React.lazy(() => import('./pages/CostAnalysis'));
 const FarmRecordBook = React.lazy(() => import('./pages/FarmRecordBook'));
 const InputFinder = React.lazy(() => import('./pages/InputFinder'));
 const GrantInformation = React.lazy(() => import('./pages/GrantInformation'));
-const LearningAcademy = React.lazy(() => import('./pages/LearningAcademy'));
 const VoiceAssistant = React.lazy(() => import('./pages/VoiceAssistant'));
+const Onboarding = React.lazy(() => import('./pages/Onboarding'));
 const Auth = React.lazy(() => import('./pages/Auth'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -64,6 +64,7 @@ function App() {
     <BrowserRouter>
       <React.Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
         <Routes>
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route index element={<WeatherDashboard />} />
@@ -76,7 +77,6 @@ function App() {
             <Route path="pests" element={<PestDiseaseGuide />} />
             <Route path="cost" element={<CostAnalysis />} />
             <Route path="records" element={<FarmRecordBook />} />
-            <Route path="academy" element={<LearningAcademy />} />
             <Route path="grants" element={<GrantInformation />} />
             <Route path="finder" element={<InputFinder />} />
             <Route path="voice" element={<VoiceAssistant />} />
