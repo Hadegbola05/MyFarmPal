@@ -1,105 +1,148 @@
 import * as React from 'react';
-import { 
-  Mic, 
-  Volume2, 
-  VolumeX, 
-  Send, 
-  Sparkles, 
-  RotateCcw, 
-  User, 
-  Bot, 
-  X, 
-  Maximize2,
+import {
+  Mic,
+  Volume2,
+  VolumeX,
+  Send,
+  Sparkles,
+  RotateCcw,
+  User,
+  Bot,
+  X,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  Loader2,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import AppLogo from './AppLogo';
-import { useNavigate } from 'react-router-dom';
+
+// ---------------------------------------------------------------------------
+// Real backend: Supabase Edge Function "myfarmpal-voice" -> Modal -> N-ATLaS
+//   transcribe: NCAIR1 N-ATLaS ASR (speech -> text)
+//   advice:     N-ATLaS LLM (text -> text)
+//   speak:      optional text-to-speech (not part of N-ATLaS)
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/myfarmpal-voice`;
+const MAX_RECORD_SECONDS = 30; // the speech models take at most 30 seconds
+
+async function callFunction(payload: Record<string, unknown>) {
+  const res = await fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ANON_KEY}`,
+      apikey: ANON_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'Something went wrong. Please try again.');
+  return data;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(new Error('Could not read the recording.'));
+    r.readAsDataURL(blob);
+  });
+}
+
+function getSessionId() {
+  try {
+    let id = localStorage.getItem('mfp_session');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('mfp_session', id);
+    }
+    return id;
+  } catch {
+    return 'anon';
+  }
+}
 
 type SupportedLanguage = 'English' | 'Hausa' | 'Igbo' | 'Yoruba';
 
 interface LanguageConfig {
   id: SupportedLanguage;
+  api: 'en' | 'ha' | 'ig' | 'yo'; // code sent to the backend
   name: string;
   nativeName: string;
   flag: string;
-  code: string;
   greeting: string;
   placeholder: string;
   quickQuestions: string[];
 }
 
+// Quick questions only cover topics that have verified answers in the backend.
+// Add more once native speakers have written/approved them.
 const FOUR_LANGUAGES: LanguageConfig[] = [
   {
     id: 'English',
+    api: 'en',
     name: 'English',
     nativeName: 'Standard & Pidgin',
     flag: '🇳🇬',
-    code: 'en-NG',
-    greeting: 'Hello Farmer! I am your MyFarmPal Voice Assistant. Tap the microphone to speak, or ask me anything about your farm.',
-    placeholder: 'Ask in English or Pidgin...',
+    greeting:
+      'Hello Farmer! I am your MyFarmPal Voice Assistant. Tap the microphone to speak, or type your farming question.',
+    placeholder: 'Ask in English...',
     quickQuestions: [
-      "When should I apply NPK to maize?",
-      "What is the current cassava price in Mile 12?",
-      "Will it rain in my region this week?",
-      "How do I control fall armyworm in my crops?"
-    ]
+      'How do I control fall armyworm in my maize?',
+      'How do I store maize grain safely?',
+    ],
   },
   {
     id: 'Hausa',
+    api: 'ha',
     name: 'Hausa',
     nativeName: 'Harshen Hausa',
     flag: '🌽',
-    code: 'ha-NG',
-    greeting: 'Sannu Manomi! Ni ne Mataimakin Muryar MyFarmPal. Danna makirufo domin yin magana ko tambaya game da gonarka.',
+    greeting:
+      'Sannu Manomi! Ni ne Mataimakin Muryar MyFarmPal. Danna makirufo domin yin magana ko tambaya game da gonarka.',
     placeholder: 'Yi tambaya cikin Hausa...',
-    quickQuestions: [
-      "Yaushe zan zuba takin NPK ga masara?",
-      "Nawa ne kudin hatsi a kasuwa yanzu?",
-      "Za a yi ruwan sama a wannan makon?",
-      "Yaya zan magance kwari a gonata?"
-    ]
+    quickQuestions: ['Yaya zan magance kwari a gonata?'],
   },
   {
     id: 'Igbo',
+    api: 'ig',
     name: 'Igbo',
     nativeName: 'Asụsụ Igbo',
     flag: '🍠',
-    code: 'ig-NG',
-    greeting: 'Ndewo Onye Ọrụ Ugbo! Abụ m Onye Enyemaka Olu MyFarmPal gị. Metụ igwe okwu aka ikwu okwu ma ọ bụ jụọ ajụjụ banyere ugbo gị.',
-    placeholder: 'Jụọ ajụjụ n\'asụsụ Igbo...',
-    quickQuestions: [
-      "Kedu mgbe a ga-agba fatịlaịza NPK n'ọka?",
-      "Ego ole ka akpu na-ere n'ahịa ugbua?",
-      "Mmiri ozuzo ọ ga-ezo n'izu a?",
-      "Kedu ka m ga-esi gbochie ụmụ ahụhụ n'ugbo m?"
-    ]
+    greeting:
+      'Ndewo Onye Ọrụ Ugbo! Abụ m Onye Enyemaka Olu MyFarmPal gị. Metụ igwe okwu aka ikwu okwu ma ọ bụ jụọ ajụjụ banyere ugbo gị.',
+    placeholder: "Jụọ ajụjụ n'asụsụ Igbo...",
+    quickQuestions: ["Kedu ka m ga-esi gbochie ụmụ ahụhụ n'ugbo m?"],
   },
   {
     id: 'Yoruba',
+    api: 'yo',
     name: 'Yoruba',
     nativeName: 'Èdè Yorùbá',
     flag: '🌾',
-    code: 'yo-NG',
-    greeting: 'Ẹ n lẹ́ Àgbẹ̀! Èmi ni Olùrànlọ́wọ́ Ohùn MyFarmPal yín. Tẹ maikirofoonu láti sọ̀rọ̀ tàbí bèèrè ohunkóhun nípa oko yín.',
+    greeting:
+      'Ẹ n lẹ́ Àgbẹ̀! Èmi ni Olùrànlọ́wọ́ Ohùn MyFarmPal yín. Tẹ maikirofoonu láti sọ̀rọ̀ tàbí bèèrè ohunkóhun nípa oko yín.',
     placeholder: 'Bèèrè ní èdè Yorùbá...',
-    quickQuestions: [
-      "Ìgbà wo ni kí n bọ ajílẹ̀ NPK s'oko àgbàdo?",
-      "Èló ni àpò gbágùúdá tàbí iṣu l'ọ́jà?",
-      "Ǹjẹ́ òjò máa rọ̀ ní ọ̀sẹ̀ yìí?",
-      "Báwo ni mo ṣe lè dẹ́kun kòkòrò nínú oko mi?"
-    ]
-  }
+    quickQuestions: ['Báwo ni mo ṣe lè dẹ́kun kòkòrò nínú oko mi?'],
+  },
 ];
 
 type Message = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  contentEn?: string;
+  showEn?: boolean;
+  logId?: string;
+  feedback?: boolean;
+  greeting?: boolean;
   timestamp: string;
 };
 
@@ -110,219 +153,242 @@ interface FloatingVoiceAssistantProps {
 
 export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoiceAssistantProps) {
   const [selectedLanguage, setSelectedLanguage] = React.useState<LanguageConfig | null>(null);
-  const [isListening, setIsListening] = React.useState(false);
+  const [isListening, setIsListening] = React.useState(false); // recording
+  const [isTranscribing, setIsTranscribing] = React.useState(false);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [loadingAudioId, setLoadingAudioId] = React.useState<string | null>(null);
   const [input, setInput] = React.useState('');
-  const [isTyping, setIsTyping] = React.useState(false);
-  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
-  const navigate = useNavigate();
-
+  const [isTyping, setIsTyping] = React.useState(false); // waiting for the answer
+  const [error, setError] = React.useState('');
   const [messages, setMessages] = React.useState<Message[]>([]);
 
-  // When assistant opens or closes
+  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+  const recorderRef = React.useRef<MediaRecorder | null>(null);
+  const chunksRef = React.useRef<Blob[]>([]);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  const timerRef = React.useRef<number | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const discardRef = React.useRef(false);
+
+  const busy = isTranscribing || isTyping;
+
+  // When the assistant closes, stop everything.
   React.useEffect(() => {
     if (!isOpen) {
       stopSpeaking();
-      setIsListening(false);
+      discardRef.current = true;
+      stopRecording();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   React.useEffect(() => {
     if (selectedLanguage && isOpen) {
-      scrollToBottom();
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isTyping, selectedLanguage, isOpen]);
 
-  // Handle selecting one of the 4 languages
-  const handleSelectLanguage = (lang: LanguageConfig) => {
+  function handleSelectLanguage(lang: LanguageConfig) {
     setSelectedLanguage(lang);
-    const welcomeMsg: Message = {
-      id: 'welcome-' + lang.id,
-      role: 'assistant',
-      content: lang.greeting,
-      timestamp: 'Just now'
-    };
-    setMessages([welcomeMsg]);
-    // Speak greeting in natural voice
-    speakText(lang.greeting, lang.code);
-  };
+    setError('');
+    setMessages([
+      {
+        id: 'welcome-' + lang.id,
+        role: 'assistant',
+        content: lang.greeting,
+        greeting: true,
+        timestamp: 'Just now',
+      },
+    ]);
+  }
 
-  const handleBackToLanguages = () => {
+  function handleBackToLanguages() {
     stopSpeaking();
-    setIsListening(false);
+    discardRef.current = true;
+    stopRecording();
     setSelectedLanguage(null);
     setMessages([]);
     setInput('');
-  };
+    setError('');
+  }
 
-  const speakText = (text: string, customCode?: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      utterance.lang = customCode || selectedLanguage?.code || 'en-NG';
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
-  const stopSpeaking = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
-  };
-
-  const toggleListening = () => {
-    if (isListening) {
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.lang = selectedLanguage?.code || 'en-NG';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        recognition.onstart = () => {
-          setIsListening(true);
-        };
-
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setIsListening(false);
-          if (transcript) {
-            handleUserQuery(transcript);
-          }
-        };
-
-        recognition.onerror = () => {
-          setIsListening(false);
-          simulateVoiceInput();
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognition.start();
-        return;
-      } catch {
-        // Fallback simulation below
-      }
-    }
-
-    simulateVoiceInput();
-  };
-
-  const simulateVoiceInput = () => {
-    setIsListening(true);
-    setTimeout(() => {
-      setIsListening(false);
-      const questions = selectedLanguage?.quickQuestions || FOUR_LANGUAGES[0].quickQuestions;
-      const randomQuery = questions[Math.floor(Math.random() * questions.length)];
-      handleUserQuery(randomQuery);
-    }, 2000);
-  };
-
-  const handleUserQuery = (queryText: string) => {
-    if (!queryText.trim()) return;
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: queryText.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-      let response = "Based on current agronomic advisory, ensure adequate soil moisture before top-dressing fertilizer.";
-      const lower = queryText.toLowerCase();
-
-      if (selectedLanguage?.id === 'Hausa') {
-        if (lower.includes('taki') || lower.includes('npk') || lower.includes('masara')) {
-          response = "Ga masara, a zuba takin NPK 15:15:15 bayan mako 2 zuwa 3 da shuka. Bayan haka a kara takin Urea a mako na 5 kafin fitar fure domin samun yabanya mai kyau.";
-        } else if (lower.includes('kudi') || lower.includes('kasuwa') || lower.includes('hatsi')) {
-          response = "Kudin buhun masara a kasuwannin Arewa yanzu yana tsakanin ₦45,000 zuwa ₦52,000 dangane da inganci.";
-        } else if (lower.includes('ruwa') || lower.includes('sama')) {
-          response = "Hasashen yanayi ya nuna za a iya samun ruwan sama a tsakiyar mako tare da yanayi mai dumi mai kyau ga shuka.";
-        } else {
-          response = "Don magance kwari, a fesa maganin kwari da sassafe ko da yamma, sannan a tabbatar da tsaftar gona.";
-        }
-      } else if (selectedLanguage?.id === 'Igbo') {
-        if (lower.includes('fatịlaịza') || lower.includes('npk') || lower.includes('ọka')) {
-          response = "Maka ọka, tinye fatịlaịza NPK 15:15:15 izu abụọ ma ọ bụ atọ mgbe a kụsịrị ya. Mgbe izu ise gasịrị, tinye Urea tupu ọ gbawaa ifuru maka ezigbo owuwe ihe ubi.";
-        } else if (lower.includes('ego') || lower.includes('ahịa') || lower.includes('akpu')) {
-          response = "Akpa akpu na-ere ugbu a ihe dịka ₦48,000 n'ahịa ndị dị na South-East na Mile 12, ọnụahịa na-arị elu n'ihi nnukwu mkpa.";
-        } else if (lower.includes('mmiri') || lower.includes('ozuzo')) {
-          response = "Mmiri ozuzo nwere ike izo n'ehihie a, ezigbo oge iji kụọ mkpụrụ osisi ma ọ bụ fesa ọgwụ ahịhịa.";
-        } else {
-          response = "Iji gbochie ụmụ ahụhụ, fesa ọgwụ kwesịrị ekwesị n'ụtụtụ ma ọ bụ n'anyasị ozugbo n'ime akwụkwọ ọka.";
-        }
-      } else if (selectedLanguage?.id === 'Yoruba') {
-        if (lower.includes('ajílẹ̀') || lower.includes('npk') || lower.includes('àgbàdo')) {
-          response = "Fún àgbàdo, bu ajílẹ̀ NPK 15:15:15 sí i ní ọ̀sẹ̀ méjì sí mẹ́ta lẹ́yìn gbígbin. Lẹ́yìn náà, fi Urea kún un ní ọ̀sẹ̀ karùn-ún kí ó tó bẹ̀rẹ̀ sí í yọ ìtànná fún ìkórè gidi.";
-        } else if (lower.includes('owó') || lower.includes('èló') || lower.includes('ọjà') || lower.includes('gbágùúdá')) {
-          response = "Àpò gbágùúdá 100kg wà ní nǹkan bí ₦48,000 ní ọjà Mile 12 àti Bodija ní ọ̀sẹ̀ yìí, owó rẹ̀ sì ń fi ìdá mẹ́rin hàn sí i.";
-        } else if (lower.includes('òjò')) {
-          response = "Àyẹ̀wò ojú ọjọ́ fi hàn pé òjò fẹ́rẹ̀ẹ́ rọ̀ ní ọ̀sán pẹ̀lú ooru tó dọ́gba, èyí dára púpọ̀ fún gbígbin irúgbìn tuntun.";
-        } else {
-          response = "Láti dẹ́kun kòkòrò legbele nínú oko, fún oògùn kòkòrò Emamectin ní àárọ̀ kùtùkùtù tàbí ìrọ̀lẹ́ tààrà sínú ewé àgbàdo.";
-        }
-      } else {
-        // English
-        if (lower.includes('npk') || lower.includes('fertilizer') || lower.includes('maize')) {
-          response = "For maize, apply NPK 15:15:15 at 2 to 3 weeks after planting (approx. 50kg/plot). Follow with Urea top-dressing at 5 to 6 weeks before tasseling.";
-        } else if (lower.includes('cassava') || lower.includes('price')) {
-          response = "Cassava tubers currently average ₦48,000 per 100kg bag in major South-West markets including Mile 12 and Bodija, showing a 4% increase this week.";
-        } else if (lower.includes('rain') || lower.includes('weather')) {
-          response = "Weather forecast predicts a 65% chance of afternoon showers with average temperatures around 31°C. Great conditions for planting!";
-        } else if (lower.includes('armyworm') || lower.includes('pest')) {
-          response = "Fall armyworm should be handled early. Spray Emamectin Benzoate 5% SG directly into the leaf whorls in the early morning or evening.";
-        }
-      }
-
-      const botMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages(prev => [...prev, botMsg]);
-      setIsTyping(false);
-      speakText(response);
-    }, 1100);
-  };
-
-  const handleReset = () => {
+  function handleReset() {
     stopSpeaking();
+    setError('');
     if (selectedLanguage) {
       setMessages([
         {
           id: 'reset-' + Date.now(),
           role: 'assistant',
           content: selectedLanguage.greeting,
-          timestamp: 'Just now'
-        }
+          greeting: true,
+          timestamp: 'Just now',
+        },
       ]);
     }
-  };
+  }
+
+  // ------------------------------------------------------------ audio out
+  function stopSpeaking() {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setIsSpeaking(false);
+  }
+
+  async function speakMessage(m: Message) {
+    if (!selectedLanguage) return;
+    if (isSpeaking) {
+      stopSpeaking();
+      return;
+    }
+    setError('');
+    setLoadingAudioId(m.id);
+    try {
+      const data = await callFunction({
+        action: 'speak',
+        language: selectedLanguage.api,
+        text: m.content,
+      });
+      if (!data.audio_b64) {
+        setError(`Spoken answers are not available for ${selectedLanguage.name} yet.`);
+        return;
+      }
+      const audio = new Audio(`data:${data.mime || 'audio/wav'};base64,${data.audio_b64}`);
+      audioRef.current = audio;
+      audio.onended = () => setIsSpeaking(false);
+      await audio.play();
+      setIsSpeaking(true);
+    } catch (e) {
+      setError('Could not play the voice. ' + (e as Error).message);
+    } finally {
+      setLoadingAudioId(null);
+    }
+  }
+
+  // ------------------------------------------------------------- audio in
+  function stopRecording() {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    const rec = recorderRef.current;
+    if (rec && rec.state === 'recording') rec.stop();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    setIsListening(false);
+  }
+
+  async function toggleListening() {
+    if (isListening) {
+      stopRecording();
+      return;
+    }
+    if (busy || !selectedLanguage) return;
+    setError('');
+    stopSpeaking();
+    discardRef.current = false;
+    const lang = selectedLanguage;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) =>
+        MediaRecorder.isTypeSupported(t),
+      );
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size) chunksRef.current.push(e.data);
+      };
+      rec.onstop = async () => {
+        if (discardRef.current) return;
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        if (blob.size < 2000) {
+          setError('That was too short. Tap the microphone and speak again.');
+          return;
+        }
+        setIsTranscribing(true);
+        try {
+          const audio_b64 = await blobToBase64(blob);
+          const data = await callFunction({ action: 'transcribe', language: lang.api, audio_b64 });
+          const text = String(data.text || '').trim();
+          setIsTranscribing(false);
+          if (!text) {
+            setError('I could not hear you clearly. Please try again.');
+            return;
+          }
+          await handleUserQuery(text, 'voice', lang);
+        } catch (e) {
+          setError((e as Error).message);
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setIsListening(true);
+      timerRef.current = window.setTimeout(stopRecording, MAX_RECORD_SECONDS * 1000);
+    } catch {
+      setError('Please allow microphone access in your browser to speak.');
+    }
+  }
+
+  // ------------------------------------------------------- ask N-ATLaS
+  async function handleUserQuery(
+    queryText: string,
+    inputType: 'voice' | 'text' = 'text',
+    langOverride?: LanguageConfig,
+  ) {
+    const lang = langOverride || selectedLanguage;
+    const text = queryText.trim();
+    if (!text || !lang) return;
+    setError('');
+    stopSpeaking();
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
+    setIsTyping(true);
+
+    try {
+      const data = await callFunction({
+        action: 'advice',
+        language: lang.api,
+        messages: [{ role: 'user', text }],
+        input_type: inputType,
+        session_id: getSessionId(),
+        module: 'general',
+      });
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.reply || 'Sorry, I could not generate an answer. Please try again.',
+        contentEn: data.reply_en || undefined,
+        logId: data.log_id || undefined,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, botMsg]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setIsTyping(false);
+    }
+  }
+
+  async function sendFeedback(m: Message, helpful: boolean) {
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, feedback: helpful } : x)));
+    if (!m.logId) return;
+    try {
+      await callFunction({ action: 'feedback', log_id: m.logId, helpful });
+    } catch {
+      /* feedback is optional */
+    }
+  }
+
+  function toggleEnglish(id: string) {
+    setMessages((prev) => prev.map((x) => (x.id === id ? { ...x, showEn: !x.showEn } : x)));
+  }
 
   return (
     <AnimatePresence>
@@ -401,19 +467,6 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => {
-                    onClose();
-                    navigate('/voice');
-                  }}
-                  className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/15"
-                  title="Full View"
-                >
-                  <Maximize2 size={15} />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
                   onClick={onClose}
                   className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/15 rounded-full"
                   title="Close Assistant"
@@ -423,7 +476,7 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
               </div>
             </div>
 
-            {/* SCREEN 1: UNCONGESTED 4-LANGUAGE SELECTION */}
+            {/* SCREEN 1: LANGUAGE SELECTION */}
             {!selectedLanguage ? (
               <div className="flex-1 flex flex-col justify-between p-5 bg-gradient-to-b from-[#FCFBF7] to-white overflow-y-auto">
                 <div className="text-center pt-2 pb-4">
@@ -438,7 +491,6 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                   </p>
                 </div>
 
-                {/* 4 Clean Language Option Cards */}
                 <div className="space-y-2.5 my-auto">
                   {FOUR_LANGUAGES.map((lang) => (
                     <motion.button
@@ -457,9 +509,7 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                           <p className="text-sm font-extrabold text-slate-900 group-hover:text-[#4EA923] transition-colors leading-tight">
                             {lang.name}
                           </p>
-                          <p className="text-xs text-slate-500 font-medium">
-                            {lang.nativeName}
-                          </p>
+                          <p className="text-xs text-slate-500 font-medium">{lang.nativeName}</p>
                         </div>
                       </div>
 
@@ -472,14 +522,14 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
 
                 <div className="text-center pt-3 pb-1">
                   <p className="text-[11px] text-slate-400 font-medium">
-                    🌾 Powered by MyFarmPal Multilingual Voice Engine
+                    🌾 Powered by N-ATLaS (Awarri Technologies · Federal Ministry of Communications,
+                    Innovation and Digital Economy)
                   </p>
                 </div>
               </div>
             ) : (
-              /* SCREEN 2: CLEAN, UNCONGESTED VOICE SESSION */
+              /* SCREEN 2: VOICE SESSION */
               <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50">
-                {/* Active Language Bar with Change Button */}
                 <div className="bg-white px-4 py-2 border-b border-slate-100 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-2">
                     <span className="text-base">{selectedLanguage.flag}</span>
@@ -497,7 +547,7 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                   </button>
                 </div>
 
-                {/* Central Microphone Area */}
+                {/* Microphone area */}
                 <div className="p-4 bg-gradient-to-b from-emerald-50/50 via-white to-white flex flex-col items-center justify-center shrink-0 border-b border-slate-100">
                   <div className="relative flex items-center justify-center my-1">
                     <AnimatePresence>
@@ -522,44 +572,57 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                     <button
                       type="button"
                       onClick={toggleListening}
+                      disabled={busy}
                       className={cn(
-                        "relative w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg transition-all duration-300 z-10 cursor-pointer border-3",
+                        'relative w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg transition-all duration-300 z-10 cursor-pointer border-3 disabled:opacity-60',
                         isListening
-                          ? "bg-gradient-to-tr from-[#3D8F19] to-[#54B82A] text-white border-amber-300 scale-105"
-                          : "bg-gradient-to-tr from-[#4EA923] to-[#3D8F19] text-white border-[#FAB814]/70 hover:border-[#FAB814] hover:scale-105"
+                          ? 'bg-gradient-to-tr from-[#3D8F19] to-[#54B82A] text-white border-amber-300 scale-105'
+                          : 'bg-gradient-to-tr from-[#4EA923] to-[#3D8F19] text-white border-[#FAB814]/70 hover:border-[#FAB814] hover:scale-105',
                       )}
-                      aria-label="Toggle Voice Input"
+                      aria-label={isListening ? 'Stop recording' : 'Start speaking'}
                     >
-                      {isListening ? (
+                      {busy ? (
+                        <Loader2 size={32} className="text-amber-200 animate-spin" />
+                      ) : isListening ? (
                         <Volume2 size={32} className="text-amber-200 animate-pulse" />
                       ) : (
                         <Mic size={32} className="text-[#FAB814] drop-shadow-xs" />
                       )}
                       <span className="text-[9px] font-black uppercase text-white/95 mt-0.5">
-                        {isListening ? "Listening" : "Speak"}
+                        {busy ? 'Wait' : isListening ? 'Stop' : 'Speak'}
                       </span>
                     </button>
                   </div>
 
-                  <p className={cn(
-                    "text-xs font-bold mt-2 transition-colors",
-                    isListening ? "text-[#4EA923] animate-pulse" : isSpeaking ? "text-[#FAB814]" : "text-slate-500"
-                  )}>
-                    {isListening 
-                      ? `Listening in ${selectedLanguage.name}... Speak now!` 
-                      : isSpeaking 
-                      ? "🔊 Speaking response..." 
-                      : "Tap microphone to speak or pick a prompt"}
+                  <p
+                    className={cn(
+                      'text-xs font-bold mt-2 transition-colors text-center',
+                      isListening
+                        ? 'text-[#4EA923] animate-pulse'
+                        : isSpeaking
+                          ? 'text-[#FAB814]'
+                          : 'text-slate-500',
+                    )}
+                  >
+                    {isListening
+                      ? `Listening in ${selectedLanguage.name}... tap to stop`
+                      : isTranscribing
+                        ? 'Understanding what you said...'
+                        : isTyping
+                          ? 'Preparing your answer... the first one can take a while'
+                          : isSpeaking
+                            ? '🔊 Speaking response...'
+                            : 'Tap the microphone to speak, or pick a question'}
                   </p>
 
-                  {/* Clean Quick Prompts */}
                   <div className="flex items-center gap-1.5 overflow-x-auto w-full pt-2.5 pb-0.5 scrollbar-none">
                     {selectedLanguage.quickQuestions.map((q, i) => (
                       <button
                         key={i}
                         type="button"
-                        onClick={() => handleUserQuery(q)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200/60 text-[10px] font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                        disabled={busy || isListening}
+                        onClick={() => handleUserQuery(q, 'text')}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200/60 text-[10px] font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1 shrink-0 disabled:opacity-50"
                       >
                         <Sparkles size={10} className="text-[#FAB814]" />
                         <span>{q}</span>
@@ -568,7 +631,7 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                   </div>
                 </div>
 
-                {/* Messages Feed */}
+                {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
                   {messages.map((m) => (
                     <motion.div
@@ -576,42 +639,92 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       className={cn(
-                        "flex gap-2 max-w-[92%]",
-                        m.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
+                        'flex gap-2 max-w-[92%]',
+                        m.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto',
                       )}
                     >
-                      <div className={cn(
-                        "w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold shadow-2xs mt-0.5",
-                        m.role === 'user' 
-                          ? "bg-slate-800 text-white" 
-                          : "bg-[#4EA923] text-white"
-                      )}>
+                      <div
+                        className={cn(
+                          'w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold shadow-2xs mt-0.5',
+                          m.role === 'user' ? 'bg-slate-800 text-white' : 'bg-[#4EA923] text-white',
+                        )}
+                      >
                         {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
                       </div>
 
-                      <div className={cn(
-                        "rounded-2xl p-2.5 text-xs shadow-xs",
-                        m.role === 'user'
-                          ? "bg-gradient-to-r from-emerald-600 to-[#4EA923] text-white rounded-tr-xs"
-                          : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs"
-                      )}>
+                      <div
+                        className={cn(
+                          'rounded-2xl p-2.5 text-xs shadow-xs',
+                          m.role === 'user'
+                            ? 'bg-gradient-to-r from-emerald-600 to-[#4EA923] text-white rounded-tr-xs'
+                            : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs',
+                        )}
+                      >
                         <p className="leading-relaxed whitespace-pre-wrap">{m.content}</p>
 
-                        <div className={cn(
-                          "flex items-center justify-between gap-3 mt-1.5 pt-1 border-t text-[9px]",
-                          m.role === 'user' ? "border-white/20 text-emerald-100" : "border-slate-100 text-slate-400"
-                        )}>
+                        {m.showEn && m.contentEn && (
+                          <p className="mt-1.5 pt-1.5 border-t border-slate-100 text-slate-500 leading-relaxed whitespace-pre-wrap">
+                            {m.contentEn}
+                          </p>
+                        )}
+
+                        <div
+                          className={cn(
+                            'flex items-center justify-between gap-3 mt-1.5 pt-1 border-t text-[9px]',
+                            m.role === 'user'
+                              ? 'border-white/20 text-emerald-100'
+                              : 'border-slate-100 text-slate-400',
+                          )}
+                        >
                           <span>{m.timestamp}</span>
-                          {m.role === 'assistant' && (
-                            <button
-                              type="button"
-                              onClick={() => speakText(m.content)}
-                              className="hover:text-emerald-700 flex items-center gap-1 font-semibold cursor-pointer"
-                              title="Replay Audio"
-                            >
-                              <Volume2 size={11} />
-                              <span>Listen</span>
-                            </button>
+
+                          {m.role === 'assistant' && !m.greeting && (
+                            <div className="flex items-center gap-2.5">
+                              {m.contentEn && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleEnglish(m.id)}
+                                  className="hover:text-emerald-700 font-semibold cursor-pointer"
+                                >
+                                  {m.showEn ? 'Hide English' : 'English'}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => speakMessage(m)}
+                                disabled={loadingAudioId === m.id}
+                                className="hover:text-emerald-700 flex items-center gap-1 font-semibold cursor-pointer"
+                                title="Listen"
+                              >
+                                {loadingAudioId === m.id ? (
+                                  <Loader2 size={11} className="animate-spin" />
+                                ) : (
+                                  <Volume2 size={11} />
+                                )}
+                                <span>{isSpeaking ? 'Stop' : 'Listen'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => sendFeedback(m, true)}
+                                disabled={m.feedback !== undefined}
+                                aria-label="Helpful"
+                                className={cn(
+                                  'cursor-pointer',
+                                  m.feedback === true && 'text-emerald-600',
+                                )}
+                              >
+                                <ThumbsUp size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => sendFeedback(m, false)}
+                                disabled={m.feedback !== undefined}
+                                aria-label="Not helpful"
+                                className={cn('cursor-pointer', m.feedback === false && 'text-rose-600')}
+                              >
+                                <ThumbsDown size={12} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -635,23 +748,28 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Bar */}
+                {error && (
+                  <p className="px-3 pb-1 text-[11px] font-medium text-rose-600">{error}</p>
+                )}
+
+                {/* Input bar */}
                 <div className="p-2.5 border-t border-slate-200 bg-white shrink-0">
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      handleUserQuery(input);
+                      handleUserQuery(input, 'text');
                     }}
                     className="flex items-center gap-1.5"
                   >
                     <button
                       type="button"
                       onClick={toggleListening}
+                      disabled={busy}
                       className={cn(
-                        "p-2 rounded-xl border transition-all cursor-pointer shrink-0",
+                        'p-2 rounded-xl border transition-all cursor-pointer shrink-0 disabled:opacity-50',
                         isListening
-                          ? "bg-rose-50 border-rose-300 text-rose-600 animate-pulse"
-                          : "bg-emerald-50 border-emerald-200 text-[#4EA923] hover:bg-emerald-100"
+                          ? 'bg-rose-50 border-rose-300 text-rose-600 animate-pulse'
+                          : 'bg-emerald-50 border-emerald-200 text-[#4EA923] hover:bg-emerald-100',
                       )}
                       title="Speak"
                     >
@@ -667,7 +785,7 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
 
                     <Button
                       type="submit"
-                      disabled={!input.trim()}
+                      disabled={!input.trim() || busy || isListening}
                       size="sm"
                       className="bg-[#4EA923] hover:bg-[#3D8F19] text-white rounded-xl h-9 px-3 font-bold shadow-xs shrink-0"
                     >
@@ -675,6 +793,10 @@ export default function FloatingVoiceAssistant({ isOpen, onClose }: FloatingVoic
                       <span className="ml-1 text-xs">Send</span>
                     </Button>
                   </form>
+                  <p className="text-[9px] text-slate-400 text-center mt-1.5 leading-snug">
+                    AI answers can be wrong. Confirm pesticide advice with your local extension
+                    officer. Questions are saved to improve the app.
+                  </p>
                 </div>
               </div>
             )}
